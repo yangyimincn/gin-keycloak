@@ -179,13 +179,21 @@ func authChain(config KeycloakConfig, accessCheckFunctions ...AccessCheckFunctio
 		go func() {
 			tokenContainer, ok := getTokenContainer(ctx, config)
 			if !ok {
-				ctx.AbortWithError(http.StatusUnauthorized, errors.New("No token in context"))
+				ctx.AbortWithStatusJSON(200, gin.H{
+					"code": 401,
+					"message": "No Token Provided or Invalid Token",
+					"data": nil,
+				})
 				varianceControl <- false
 				return
 			}
 
 			if !tokenContainer.Valid() {
-				ctx.AbortWithError(http.StatusUnauthorized, errors.New("Invalid Token"))
+				ctx.AbortWithStatusJSON(200, gin.H{
+					"code": 401,
+					"message": "Invalid Token",
+					"data": nil,
+				})
 				varianceControl <- false
 				return
 			}
@@ -197,11 +205,16 @@ func authChain(config KeycloakConfig, accessCheckFunctions ...AccessCheckFunctio
 				}
 
 				if len(accessCheckFunctions)-1 == i {
-					_ = ctx.AbortWithError(http.StatusForbidden, errors.New("Access to the Resource is forbidden"))
+					ctx.AbortWithStatusJSON(200, gin.H{
+						"code": 403,
+						"message": "Access to the Resource is forbidden",
+						"data": nil,
+					})
 					varianceControl <- false
 					return
 				}
 			}
+			ctx.Set("token", tokenContainer)
 		}()
 
 		select {
@@ -211,11 +224,14 @@ func authChain(config KeycloakConfig, accessCheckFunctions ...AccessCheckFunctio
 				return
 			}
 		case <-time.After(VarianceTimer):
-			ctx.AbortWithError(http.StatusGatewayTimeout, errors.New("Authorization check overtime"))
+			ctx.AbortWithStatusJSON(200, gin.H{
+				"code": 504,
+				"message": "Authorization check overtime",
+				"data": nil,
+			})
 			glog.V(2).Infof("[Gin-OAuth] %12v %s overtime", time.Since(t), ctx.Request.URL.Path)
 			return
 		}
-
 		glog.V(2).Infof("[Gin-OAuth] %12v %s access allowed", time.Since(t), ctx.Request.URL.Path)
 	}
 }
